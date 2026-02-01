@@ -1,0 +1,49 @@
+package repository
+
+import (
+	"Forum/internal/domain"
+
+	"gorm.io/gorm"
+)
+
+type CommentRepo interface {
+	Create(comment *domain.Comment) error
+	FindByID(id uint) (*domain.Comment, error)
+	ListByPostID(postID uint, limit, offset int) ([]domain.Comment, error)
+	Delete(id uint) error
+}
+
+type commentRepo struct {
+	db *gorm.DB
+}
+
+func NewCommentRepo(db *gorm.DB) CommentRepo {
+	return &commentRepo{db: db}
+}
+
+func (c *commentRepo) Create(comment *domain.Comment) error {
+	return c.db.Create(comment).Error
+}
+
+func (c *commentRepo) FindByID(id uint) (*domain.Comment, error) {
+	var comment domain.Comment
+	err := c.db.First(&comment, id).Error
+	return &comment, err
+}
+
+func (c *commentRepo) ListByPostID(postID uint, limit, offset int) ([]domain.Comment, error) {
+	var comments []domain.Comment
+
+	query := c.db.Model(&domain.Comment{}).Where("post_id=?", postID)
+	err := query.Preload("User").
+		Order("created_at desc").
+		Limit(limit).
+		Offset(offset).
+		Find(&comments).Error
+
+	return comments, err
+}
+
+func (c *commentRepo) Delete(id uint) error {
+	return c.db.Delete(&domain.Comment{}, id).Error
+}
