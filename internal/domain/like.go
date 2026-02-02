@@ -22,6 +22,11 @@ type LikeRequest struct {
 	TargetType string `json:"target_type" binding:"required,oneof=post comment"`
 }
 
+type ToggleRequest struct {
+	TargetID   uint   `json:"target_id" binding:"required"`
+	TargetType string `json:"target_type" binding:"required,oneof=post comment"`
+}
+
 type LikeResponse struct {
 	IsLiked   bool  `json:"is_liked"`
 	LikeCount int64 `json:"like_count"`

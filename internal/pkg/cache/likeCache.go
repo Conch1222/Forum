@@ -23,7 +23,7 @@ type likeCache struct {
 	rdb *redis.Client
 }
 
-func NewLickCache(rdb *redis.Client) LikeCache {
+func NewLikeCache(rdb *redis.Client) LikeCache {
 	return &likeCache{rdb: rdb}
 }
 

@@ -42,14 +42,14 @@ func (l *likeRepo) Delete(userID, targetID uint, targetType string) error {
 }
 
 func (l *likeRepo) IsExist(userID, targetID uint, targetType string) (bool, error) {
-	var count int64
-	err := l.db.Model(&domain.Like{}).Where("user_id = ? AND target_id = ? AND target_type = ?",
-		userID, targetID, targetType).Count(&count).Error
-	if err != nil {
-		return false, err
+	var like domain.Like
+	tx := l.db.Model(&domain.Like{}).Where("user_id = ? AND target_id = ? AND target_type = ?",
+		userID, targetID, targetType).Limit(1).Find(&like)
+	if tx.Error != nil {
+		return false, tx.Error
 	}
 
-	return count > 0, nil
+	return tx.RowsAffected > 0, nil
 }
 
 func (l *likeRepo) Count(targetID uint, targetType string) (int64, error) {

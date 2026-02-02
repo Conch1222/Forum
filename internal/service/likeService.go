@@ -13,7 +13,7 @@ type LikeService interface {
 
 	// GetStatus get status of like
 	GetStatus(ctx context.Context, userID, targetID uint, targetType string) (*domain.LikeResponse, error)
-	BatchLiked(ctx context.Context, userID, targetIDs []uint, targetType string) (map[uint]bool, error)
+	BatchLiked(ctx context.Context, userID uint, targetIDs []uint, targetType string) (map[uint]bool, error)
 }
 
 type likeService struct {
@@ -41,8 +41,8 @@ func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetT
 
 	if err.Error() == "already liked" {
 		// cancel like
-		if derr := l.likeRepo.Delete(userID, targetID, targetType); derr != nil {
-			return nil, derr
+		if dErr := l.likeRepo.Delete(userID, targetID, targetType); dErr != nil {
+			return nil, dErr
 		}
 		l.updateCache(ctx, userID, targetID, targetType, false, -1)
 		cnt, _ := l.getCount(ctx, targetID, targetType)
@@ -54,13 +54,38 @@ func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetT
 }
 
 func (l *likeService) GetStatus(ctx context.Context, userID, targetID uint, targetType string) (*domain.LikeResponse, error) {
-	//TODO implement me
-	panic("implement me")
+	// get from cache
+	isLiked, likedKnown := false, false
+	if l.cache != nil {
+		if v, err := l.cache.IsLiked(ctx, userID, targetType, targetID); err == nil {
+			likedKnown = true
+			isLiked = v
+		}
+	}
+
+	// if not in cache, get from DB
+	if !likedKnown {
+		v, err := l.likeRepo.IsExist(userID, targetID, targetType)
+		if err != nil {
+			return nil, err
+		}
+		isLiked = v
+	}
+
+	cnt, err := l.getCount(ctx, targetID, targetType)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.LikeResponse{IsLiked: isLiked, LikeCount: cnt}, nil
 }
 
-func (l *likeService) BatchLiked(ctx context.Context, userID, targetIDs []uint, targetType string) (map[uint]bool, error) {
-	//TODO implement me
-	panic("implement me")
+func (l *likeService) BatchLiked(ctx context.Context, userID uint, targetIDs []uint, targetType string) (map[uint]bool, error) {
+	if len(targetIDs) == 0 {
+		return map[uint]bool{}, nil
+	}
+
+	return l.likeRepo.BatchCheckLiked(userID, targetIDs, targetType)
 }
 
 func (l *likeService) updateCache(ctx context.Context, userID, targetID uint, targetType string, isLiked bool, delta int64) {
