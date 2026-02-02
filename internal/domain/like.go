@@ -23,6 +23,6 @@ type LikeRequest struct {
 }
 
 type LikeResponse struct {
-	IsLiked   bool `json:"is_liked"`
-	LikeCount int  `json:"like_count"`
+	IsLiked   bool  `json:"is_liked"`
+	LikeCount int64 `json:"like_count"`
 }
