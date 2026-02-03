@@ -144,7 +144,7 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 
 func initDBMigrationAndIndex(db *gorm.DB) {
 	// auto migrate models
-	_ = db.AutoMigrate(&domain.User{}, &domain.Post{}, &domain.Comment{}, &domain.Like{}, &domain.Like{})
+	_ = db.AutoMigrate(&domain.User{}, &domain.Post{}, &domain.Comment{}, &domain.Like{}, &domain.Follow{})
 
 	// like table index
 	db.Exec(`
@@ -158,4 +158,23 @@ func initDBMigrationAndIndex(db *gorm.DB) {
         ON likes(target_id, target_type) 
         WHERE deleted_at IS NULL
     `)
+
+	// follow table index
+	db.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_follow_follower_followee
+		ON follows (follower_id, followee_id)
+		WHERE deleted_at IS NULL;
+	`)
+
+	db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_follow_follower_created_at
+		ON follows (follower_id, created_at DESC)
+		WHERE deleted_at IS NULL;
+	`)
+
+	db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_follow_followee_created_at
+		ON follows (followee_id, created_at DESC)
+		WHERE deleted_at IS NULL;
+	`)
 }
