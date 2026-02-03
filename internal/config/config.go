@@ -21,7 +21,7 @@ func Load() (*Config, error) {
 		DBUser:        getEnv("DB_USER", "postgres"),
 		DBPassword:    getEnv("DB_PASSWORD", "password"),
 		DBName:        getEnv("DB_NAME", "forum_db"),
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisAddr:     getEnv("REDIS_ADDR", "127.0.0.1:6380"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		JWTKey:        getEnv("JWT_KEY", "conch2147"),
 		ServerPort:    getEnv("SERVER_PORT", "8080"),

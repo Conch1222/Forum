@@ -6,6 +6,8 @@ import (
 	"Forum/internal/repository"
 	"context"
 	"time"
+
+	"github.com/bytedance/gopkg/util/logger"
 )
 
 type LikeService interface {
@@ -93,12 +95,24 @@ func (l *likeService) updateCache(ctx context.Context, userID, targetID uint, ta
 		return
 	}
 
-	_ = l.cache.IncrCount(ctx, targetType, targetID, delta)
+	err := l.cache.IncrCount(ctx, targetType, targetID, delta)
+	if err != nil {
+		logger.Errorf("update cache error: %v", err)
+		return
+	}
 
 	if isLiked {
-		_ = l.cache.AddUserLike(ctx, userID, targetType, targetID)
+		err = l.cache.AddUserLike(ctx, userID, targetType, targetID)
+		if err != nil {
+			logger.Errorf("update cache error: %v", err)
+			return
+		}
 	} else {
-		_ = l.cache.RemoveUserLike(ctx, userID, targetType, targetID)
+		err = l.cache.RemoveUserLike(ctx, userID, targetType, targetID)
+		if err != nil {
+			logger.Errorf("update cache error: %v", err)
+			return
+		}
 	}
 }
 
