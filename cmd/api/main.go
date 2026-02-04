@@ -148,10 +148,6 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 		return nil, err
 	}
 
-	info, err := rdb.Info(ctx, "server").Result()
-	log.Println("redis INFO server err =", err)
-	log.Println(info)
-
 	addr := rdb.Options().Addr
 	db := rdb.Options().DB
 	log.Printf("redis addr=%s db=%d", addr, db)
