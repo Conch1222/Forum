@@ -47,26 +47,31 @@ func main() {
 	commentRepo := repository.NewCommentRepo(db)
 	likeRepo := repository.NewLikeRepo(db)
 	likeCache := cache.NewLikeCache(rdb)
+	followRepo := repository.NewFollowRepo(db)
 
 	userService := service.NewUserService(userRepo, cfg.JWTKey)
 	postService := service.NewPostService(postRepo, userRepo)
 	commentService := service.NewCommentService(commentRepo, postRepo, userRepo)
 	likeService := service.NewLikeService(likeRepo, likeCache)
+	followService := service.NewFollowService(followRepo)
 
 	userHandler := handler.NewUserHandler(userService)
 	postHandler := handler.NewPostHandler(postService)
 	commentHandler := handler.NewCommentHandler(commentService)
 	likeHandler := handler.NewLikeHandler(likeService)
+	followHandler := handler.NewFollowHandler(followService)
 
 	// set router
 	r := gin.Default()
 
-	// public routes
+	// public routes, // don't need login
 	r.POST("/api/v1/register", userHandler.Register)
 	r.POST("/api/v1/login", userHandler.Login)
-	r.GET("/api/v1/posts", postHandler.ListPosts)                    // don't need login
-	r.GET("/api/v1/posts/:id", postHandler.GetPostByID)              // don't need login
-	r.GET("/api/v1/posts/:id/comments", commentHandler.ListComments) // don't need login
+	r.GET("/api/v1/posts", postHandler.ListPosts)
+	r.GET("/api/v1/posts/:id", postHandler.GetPostByID)
+	r.GET("/api/v1/posts/:id/comments", commentHandler.ListComments)
+	r.GET("/api/v1/users/:id/following", followHandler.ListFollowing)
+	r.GET("/api/v1/users/:id/followers", followHandler.ListFollowers)
 
 	// protected routes
 	auth := r.Group("api/v1")
@@ -86,6 +91,10 @@ func main() {
 		// like routes
 		auth.POST("/likes/toggle", likeHandler.Toggle)
 		auth.GET("/likes/:type/:id", likeHandler.GetStatus)
+
+		// follow routes
+		auth.POST("/users/:id/follow/toggle", followHandler.Toggle)
+		auth.GET("/users/:id/follow/status", followHandler.GetStatus)
 	}
 
 	// launch server

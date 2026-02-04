@@ -39,8 +39,8 @@ func (f *followRepo) Create(follow *domain.Follow) error {
 	return nil
 }
 
-func (f *followRepo) Delete(followerID, followedID uint) error {
-	return f.db.Where("follower_id = ? AND followee_id = ?", followerID, followedID).Delete(&domain.Follow{}).Error
+func (f *followRepo) Delete(followerID, followeeID uint) error {
+	return f.db.Where("follower_id = ? AND followee_id = ?", followerID, followeeID).Delete(&domain.Follow{}).Error
 }
 
 func (f *followRepo) IsExist(followerID, followedID uint) (bool, error) {
