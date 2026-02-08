@@ -48,18 +48,25 @@ func main() {
 	likeRepo := repository.NewLikeRepo(db)
 	likeCache := cache.NewLikeCache(rdb)
 	followRepo := repository.NewFollowRepo(db)
+	feedRepo := repository.NewFeedRepo(db)
 
 	userService := service.NewUserService(userRepo, cfg.JWTKey)
 	postService := service.NewPostService(postRepo, userRepo)
 	commentService := service.NewCommentService(commentRepo, postRepo, userRepo)
 	likeService := service.NewLikeService(likeRepo, likeCache)
 	followService := service.NewFollowService(followRepo)
+	feedService := service.NewFeedService(feedRepo)
 
 	userHandler := handler.NewUserHandler(userService)
 	postHandler := handler.NewPostHandler(postService)
 	commentHandler := handler.NewCommentHandler(commentService)
 	likeHandler := handler.NewLikeHandler(likeService)
 	followHandler := handler.NewFollowHandler(followService)
+	feedHandler := handler.NewFeedHandler(feedService)
+
+	// rate limiter middleware
+	rateLimiterRepo := repository.NewRedisRateLimiter(rdb)
+	rateLimiterService := service.NewRateLimitService(rateLimiterRepo)
 
 	// set router
 	r := gin.Default()
@@ -80,12 +87,12 @@ func main() {
 		auth.GET("/profile", userHandler.GetProfile)
 
 		// post routes
-		auth.POST("/posts", postHandler.CreatePost)
+		auth.POST("/posts", middleware.RateLimitMiddleware(rateLimiterService, domain.RuleCreatePost), postHandler.CreatePost) // use rate limiter
 		auth.PUT("/posts/:id", postHandler.UpdatePost)
 		auth.DELETE("/posts/:id", postHandler.DeletePost)
 
 		// comment routes
-		auth.POST("/posts/:id/comments", commentHandler.CreateComment)
+		auth.POST("/posts/:id/comments", middleware.RateLimitMiddleware(rateLimiterService, domain.RuleCreateComment), commentHandler.CreateComment) // user rate limiter
 		auth.DELETE("/comments/:id", commentHandler.DeleteComment)
 
 		// like routes
@@ -95,6 +102,9 @@ func main() {
 		// follow routes
 		auth.POST("/users/:id/follow/toggle", followHandler.Toggle)
 		auth.GET("/users/:id/follow/status", followHandler.GetStatus)
+
+		// feed routes
+		auth.GET("/feed", feedHandler.ListHomeFeed)
 	}
 
 	// launch server

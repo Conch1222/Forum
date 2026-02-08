@@ -15,7 +15,7 @@ type Post struct {
 	Status    string         `gorm:"default:'published';index" json:"status"` // draft/published/archived
 	ViewCount int            `gorm:"default:0" json:"view_count"`
 	LikeCount int            `gorm:"default:0" json:"like_count"`
-	CreatedAt time.Time      `json:"created_at"`
+	CreatedAt time.Time      `gorm:"not null;index" json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }

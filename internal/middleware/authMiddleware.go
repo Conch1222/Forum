@@ -1,7 +1,11 @@
 package middleware
 
 import (
+	"Forum/internal/domain"
+	"Forum/internal/service"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -39,4 +43,30 @@ func AuthMiddleware(jwtKey string) gin.HandlerFunc {
 		c.Next()
 	}
 
+}
+
+func RateLimitMiddleware(service service.RateLimitService, rule domain.RateLimitRule) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.GetUint("user_id")
+
+		res, err := service.Check(c.Request.Context(), userID, rule)
+		if err != nil {
+			// redis failed: log error and next
+			c.Next()
+			log.Printf("redis error: %v\n", err)
+			return
+		}
+
+		c.Header("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
+		if !res.IsAllowed {
+			if res.RetryAfter > 0 {
+				c.Header("Retry-After", strconv.Itoa(int(res.RetryAfter.Seconds())))
+			}
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }
