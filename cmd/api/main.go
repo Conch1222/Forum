@@ -49,6 +49,7 @@ func main() {
 	likeCache := cache.NewLikeCache(rdb)
 	followRepo := repository.NewFollowRepo(db)
 	feedRepo := repository.NewFeedRepo(db)
+	searchRepo := repository.NewSearchRepo(db)
 
 	userService := service.NewUserService(userRepo, cfg.JWTKey)
 	postService := service.NewPostService(postRepo, userRepo)
@@ -56,6 +57,7 @@ func main() {
 	likeService := service.NewLikeService(likeRepo, likeCache)
 	followService := service.NewFollowService(followRepo)
 	feedService := service.NewFeedService(feedRepo)
+	searchService := service.NewSearchService(searchRepo)
 
 	userHandler := handler.NewUserHandler(userService)
 	postHandler := handler.NewPostHandler(postService)
@@ -63,6 +65,7 @@ func main() {
 	likeHandler := handler.NewLikeHandler(likeService)
 	followHandler := handler.NewFollowHandler(followService)
 	feedHandler := handler.NewFeedHandler(feedService)
+	searchHandler := handler.NewSearchHandler(searchService)
 
 	// rate limiter middleware
 	rateLimiterRepo := repository.NewRedisRateLimiter(rdb)
@@ -71,7 +74,7 @@ func main() {
 	// set router
 	r := gin.Default()
 
-	// public routes, // don't need login
+	// public routes, don't need login
 	r.POST("/api/v1/register", userHandler.Register)
 	r.POST("/api/v1/login", userHandler.Login)
 	r.GET("/api/v1/posts", postHandler.ListPosts)
@@ -79,6 +82,7 @@ func main() {
 	r.GET("/api/v1/posts/:id/comments", commentHandler.ListComments)
 	r.GET("/api/v1/users/:id/following", followHandler.ListFollowing)
 	r.GET("/api/v1/users/:id/followers", followHandler.ListFollowers)
+	r.GET("/api/v1/search/posts", searchHandler.SearchPosts)
 
 	// protected routes
 	auth := r.Group("api/v1")
@@ -198,5 +202,20 @@ func initDBMigrationAndIndex(db *gorm.DB) {
 		CREATE INDEX IF NOT EXISTS idx_follow_followee_created_at
 		ON follows (followee_id, created_at DESC)
 		WHERE deleted_at IS NULL;
+	`)
+
+	// create search full text search tsvector and index
+
+	db.Exec(`
+		ALTER TABLE posts
+		ADD COLUMN IF NOT EXISTS search_tsv tsvector
+		GENERATED ALWAYS AS (
+		  to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(content,''))
+		) STORED;
+	`)
+
+	db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_posts_search_tsv
+		ON posts USING GIN (search_tsv);
 	`)
 }

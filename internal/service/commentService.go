@@ -55,8 +55,11 @@ func (c *commentServiceImpl) ListByPostID(postID uint, page, pageSize int) ([]*d
 	if page <= 0 {
 		page = 1
 	}
-	if pageSize <= 0 || pageSize > 100 {
+	if pageSize <= 0 {
 		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
 	}
 
 	offset := (page - 1) * pageSize
