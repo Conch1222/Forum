@@ -218,4 +218,10 @@ func initDBMigrationAndIndex(db *gorm.DB) {
 		CREATE INDEX IF NOT EXISTS idx_posts_search_tsv
 		ON posts USING GIN (search_tsv);
 	`)
+
+	db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_notif_user_created
+		ON notifications (user_id, created_at DESC)
+		WHERE deleted_at IS NULL;
+	`)
 }
