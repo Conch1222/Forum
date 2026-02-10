@@ -50,6 +50,7 @@ func main() {
 	followRepo := repository.NewFollowRepo(db)
 	feedRepo := repository.NewFeedRepo(db)
 	searchRepo := repository.NewSearchRepo(db)
+	notificationRepo := repository.NewNotificationRepo(db)
 
 	userService := service.NewUserService(userRepo, cfg.JWTKey)
 	postService := service.NewPostService(postRepo, userRepo)
@@ -58,6 +59,7 @@ func main() {
 	followService := service.NewFollowService(followRepo)
 	feedService := service.NewFeedService(feedRepo)
 	searchService := service.NewSearchService(searchRepo)
+	notificationService := service.NewNotificationService(notificationRepo)
 
 	userHandler := handler.NewUserHandler(userService)
 	postHandler := handler.NewPostHandler(postService)
@@ -66,6 +68,7 @@ func main() {
 	followHandler := handler.NewFollowHandler(followService)
 	feedHandler := handler.NewFeedHandler(feedService)
 	searchHandler := handler.NewSearchHandler(searchService)
+	notificationHandler := handler.NewNotificationHandler(notificationService)
 
 	// rate limiter middleware
 	rateLimiterRepo := repository.NewRedisRateLimiter(rdb)
@@ -109,6 +112,12 @@ func main() {
 
 		// feed routes
 		auth.GET("/feed", feedHandler.ListHomeFeed)
+
+		// notification routes
+		auth.GET("/notification", notificationHandler.List)
+		auth.GET("notification/unread_count", notificationHandler.UnreadCount)
+		auth.POST("/notification/:id/read", notificationHandler.MarkRead)
+		auth.POST("/notification/read_all", notificationHandler.MarkAllRead)
 	}
 
 	// launch server
