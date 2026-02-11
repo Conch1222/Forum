@@ -30,7 +30,7 @@ func (h *NotificationHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"posts": notifs,
+		"notifications": notifs,
 		"pagination": gin.H{
 			"page":        page,
 			"page_size":   pageSize,

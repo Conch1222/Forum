@@ -52,14 +52,14 @@ func main() {
 	searchRepo := repository.NewSearchRepo(db)
 	notificationRepo := repository.NewNotificationRepo(db)
 
+	notificationService := service.NewNotificationService(notificationRepo)
 	userService := service.NewUserService(userRepo, cfg.JWTKey)
 	postService := service.NewPostService(postRepo, userRepo)
-	commentService := service.NewCommentService(commentRepo, postRepo, userRepo)
+	commentService := service.NewCommentService(commentRepo, postRepo, userRepo, notificationService)
 	likeService := service.NewLikeService(likeRepo, likeCache)
 	followService := service.NewFollowService(followRepo)
 	feedService := service.NewFeedService(feedRepo)
 	searchService := service.NewSearchService(searchRepo)
-	notificationService := service.NewNotificationService(notificationRepo)
 
 	userHandler := handler.NewUserHandler(userService)
 	postHandler := handler.NewPostHandler(postService)
@@ -115,7 +115,7 @@ func main() {
 
 		// notification routes
 		auth.GET("/notification", notificationHandler.List)
-		auth.GET("notification/unread_count", notificationHandler.UnreadCount)
+		auth.GET("/notification/unread_count", notificationHandler.UnreadCount)
 		auth.POST("/notification/:id/read", notificationHandler.MarkRead)
 		auth.POST("/notification/read_all", notificationHandler.MarkAllRead)
 	}
@@ -179,7 +179,7 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 
 func initDBMigrationAndIndex(db *gorm.DB) {
 	// auto migrate models
-	_ = db.AutoMigrate(&domain.User{}, &domain.Post{}, &domain.Comment{}, &domain.Like{}, &domain.Follow{})
+	_ = db.AutoMigrate(&domain.User{}, &domain.Post{}, &domain.Comment{}, &domain.Like{}, &domain.Follow{}, domain.Notification{})
 
 	// like table index
 	db.Exec(`
