@@ -3,6 +3,7 @@ package service
 import (
 	"Forum/internal/domain"
 	"Forum/internal/repository"
+	"context"
 	"errors"
 )
 
@@ -13,18 +14,19 @@ type CommentService interface {
 }
 
 type commentServiceImpl struct {
-	commentRepo repository.CommentRepo
-	postRepo    repository.PostRepo
-	userRepo    repository.UserRepo
+	commentRepo         repository.CommentRepo
+	postRepo            repository.PostRepo
+	userRepo            repository.UserRepo
+	notificationService NotificationService
 }
 
-func NewCommentService(commentRepo repository.CommentRepo, postRepo repository.PostRepo, userRepo repository.UserRepo) CommentService {
-	return &commentServiceImpl{commentRepo: commentRepo, postRepo: postRepo, userRepo: userRepo}
+func NewCommentService(commentRepo repository.CommentRepo, postRepo repository.PostRepo, userRepo repository.UserRepo, notifService NotificationService) CommentService {
+	return &commentServiceImpl{commentRepo: commentRepo, postRepo: postRepo, userRepo: userRepo, notificationService: notifService}
 }
 
 func (c *commentServiceImpl) Create(userID, postID uint, req *domain.CreateCommentRequest) (*domain.CommentResponse, error) {
 	// check if post exists
-	_, err := c.postRepo.FindByID(postID)
+	post, err := c.postRepo.FindByID(postID)
 	if err != nil {
 		return nil, errors.New("post not found")
 	}
@@ -39,8 +41,18 @@ func (c *commentServiceImpl) Create(userID, postID uint, req *domain.CreateComme
 		return nil, err
 	}
 
-	user, _ := c.userRepo.FindByID(userID)
+	// create notification
+	if post.UserID != userID {
+		_ = c.notificationService.Notify(context.Background(),
+			post.UserID, // receive notif
+			"comment_created",
+			"post",
+			post.ID,
+			"someone commented in your post",
+		)
+	}
 
+	user, _ := c.userRepo.FindByID(userID)
 	return &domain.CommentResponse{
 		ID:        comment.ID,
 		PostID:    comment.PostID,
