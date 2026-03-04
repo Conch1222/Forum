@@ -17,12 +17,14 @@ type LikeService interface {
 }
 
 type likeService struct {
-	likeRepo repository.LikeRepo
-	cache    cache.LikeCache
+	likeRepo    repository.LikeRepo
+	postRepo    repository.PostRepo
+	commentRepo repository.CommentRepo
+	cache       cache.LikeCache
 }
 
-func NewLikeService(likeRepo repository.LikeRepo, cache cache.LikeCache) LikeService {
-	return &likeService{likeRepo: likeRepo, cache: cache}
+func NewLikeService(likeRepo repository.LikeRepo, postRepo repository.PostRepo, commentRepo repository.CommentRepo, cache cache.LikeCache) LikeService {
+	return &likeService{likeRepo: likeRepo, postRepo: postRepo, commentRepo: commentRepo, cache: cache}
 }
 
 func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetType string) (*domain.LikeResponse, error) {
@@ -35,6 +37,14 @@ func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetT
 	if err == nil {
 		// new like
 		l.updateCache(ctx, userID, targetID, targetType, true, 1)
+
+		// add like count
+		if targetType == "post" {
+			_ = l.postRepo.IncrementLikeCount(targetID, 1)
+		} else if targetType == "comment" {
+			_ = l.commentRepo.IncrementLikeCount(targetID, 1)
+		}
+
 		cnt, _ := l.getCount(ctx, targetID, targetType)
 		return &domain.LikeResponse{IsLiked: true, LikeCount: cnt}, nil
 	}
@@ -45,6 +55,14 @@ func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetT
 			return nil, dErr
 		}
 		l.updateCache(ctx, userID, targetID, targetType, false, -1)
+
+		// minus like count
+		if targetType == "post" {
+			_ = l.postRepo.IncrementLikeCount(targetID, -1)
+		} else if targetType == "comment" {
+			_ = l.commentRepo.IncrementLikeCount(targetID, -1)
+		}
+
 		cnt, _ := l.getCount(ctx, targetID, targetType)
 		return &domain.LikeResponse{IsLiked: false, LikeCount: cnt}, nil
 	}

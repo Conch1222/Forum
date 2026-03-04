@@ -11,6 +11,7 @@ type CommentRepo interface {
 	FindByID(id uint) (*domain.Comment, error)
 	ListByPostID(postID uint, limit, offset int) ([]domain.Comment, error)
 	Delete(id uint) error
+	IncrementLikeCount(id uint, delta int) error
 }
 
 type commentRepo struct {
@@ -46,4 +47,9 @@ func (c *commentRepo) ListByPostID(postID uint, limit, offset int) ([]domain.Com
 
 func (c *commentRepo) Delete(id uint) error {
 	return c.db.Delete(&domain.Comment{}, id).Error
+}
+
+func (c *commentRepo) IncrementLikeCount(id uint, delta int) error {
+	return c.db.Model(&domain.Comment{}).Where("id = ?", id).
+		UpdateColumn("like_count", gorm.Expr("GREATEST(like_count + ?, 0)", delta)).Error
 }

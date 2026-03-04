@@ -5,6 +5,7 @@ import (
 	"Forum/internal/repository"
 	"context"
 	"errors"
+	"fmt"
 )
 
 type CommentService interface {
@@ -41,6 +42,9 @@ func (c *commentServiceImpl) Create(userID, postID uint, req *domain.CreateComme
 		return nil, err
 	}
 
+	user, _ := c.userRepo.FindByID(userID)
+	content := fmt.Sprintf("%s commented in your post", user.UserName)
+
 	// create notification
 	if post.UserID != userID {
 		_ = c.notificationService.Notify(context.Background(),
@@ -48,11 +52,10 @@ func (c *commentServiceImpl) Create(userID, postID uint, req *domain.CreateComme
 			"comment_created",
 			"post",
 			post.ID,
-			"someone commented in your post",
+			content,
 		)
 	}
 
-	user, _ := c.userRepo.FindByID(userID)
 	return &domain.CommentResponse{
 		ID:        comment.ID,
 		PostID:    comment.PostID,

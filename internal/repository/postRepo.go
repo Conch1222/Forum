@@ -13,6 +13,7 @@ type PostRepo interface {
 	Delete(id uint) error
 	List(limit, offset int) ([]*domain.Post, int64, error) // return list of posts and total count
 	IncrementViewCount(id uint) error
+	IncrementLikeCount(id uint, delta int) error
 }
 
 type postRepo struct {
@@ -66,4 +67,9 @@ func (p *postRepo) IncrementViewCount(id uint) error {
 	query := p.db.Model(&domain.Post{}).Where("id=?", id)
 
 	return query.UpdateColumn("view_count", gorm.Expr("view_count + 1")).Error
+}
+
+func (p *postRepo) IncrementLikeCount(id uint, delta int) error {
+	return p.db.Model(&domain.Post{}).Where("id = ?", id).
+		UpdateColumn("like_count", gorm.Expr("GREATEST(like_count + ?, 0)", delta)).Error
 }
