@@ -2,6 +2,7 @@ package service
 
 import (
 	"Forum/internal/domain"
+	"Forum/internal/metrics"
 	"Forum/internal/repository"
 	"errors"
 
@@ -43,6 +44,9 @@ func (p *postServiceImpl) Create(userID uint, req *domain.CreatePostRequest) (*d
 	}
 
 	user, _ := p.userRepo.FindByID(userID)
+
+	metrics.PostsCreatedTotal.Inc() // for prometheus
+
 	return &domain.PostResponse{
 		ID:        post.ID,
 		UserID:    user.ID,

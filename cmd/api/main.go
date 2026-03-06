@@ -4,6 +4,7 @@ import (
 	"Forum/internal/config"
 	"Forum/internal/domain"
 	"Forum/internal/handler"
+	"Forum/internal/metrics"
 	"Forum/internal/middleware"
 	"Forum/internal/pkg/cache"
 	"Forum/internal/repository"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -56,7 +58,7 @@ func main() {
 	userService := service.NewUserService(userRepo, cfg.JWTKey)
 	postService := service.NewPostService(postRepo, userRepo)
 	commentService := service.NewCommentService(commentRepo, postRepo, userRepo, notificationService)
-	likeService := service.NewLikeService(likeRepo, likeCache)
+	likeService := service.NewLikeService(likeRepo, postRepo, commentRepo, likeCache)
 	followService := service.NewFollowService(followRepo)
 	feedService := service.NewFeedService(feedRepo)
 	searchService := service.NewSearchService(searchRepo)
@@ -76,6 +78,11 @@ func main() {
 
 	// set router
 	r := gin.Default()
+
+	// prometheus
+	metrics.MustRegister()
+	r.Use(middleware.PrometheusMiddleware())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// public routes, don't need login
 	r.POST("/api/v1/register", userHandler.Register)

@@ -2,6 +2,7 @@ package service
 
 import (
 	"Forum/internal/domain"
+	"Forum/internal/metrics"
 	"Forum/internal/repository"
 	"context"
 	"errors"
@@ -55,6 +56,8 @@ func (c *commentServiceImpl) Create(userID, postID uint, req *domain.CreateComme
 			content,
 		)
 	}
+
+	metrics.CommentsCreatedTotal.Inc() // for prometheus
 
 	return &domain.CommentResponse{
 		ID:        comment.ID,

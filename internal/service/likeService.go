@@ -2,6 +2,7 @@ package service
 
 import (
 	"Forum/internal/domain"
+	"Forum/internal/metrics"
 	"Forum/internal/pkg/cache"
 	"Forum/internal/repository"
 	"context"
@@ -45,6 +46,8 @@ func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetT
 			_ = l.commentRepo.IncrementLikeCount(targetID, 1)
 		}
 
+		metrics.LikeToggleTotal.WithLabelValues(targetType, "liked").Inc() // for prometheus
+
 		cnt, _ := l.getCount(ctx, targetID, targetType)
 		return &domain.LikeResponse{IsLiked: true, LikeCount: cnt}, nil
 	}
@@ -62,6 +65,8 @@ func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetT
 		} else if targetType == "comment" {
 			_ = l.commentRepo.IncrementLikeCount(targetID, -1)
 		}
+
+		metrics.LikeToggleTotal.WithLabelValues(targetType, "unliked").Inc()
 
 		cnt, _ := l.getCount(ctx, targetID, targetType)
 		return &domain.LikeResponse{IsLiked: false, LikeCount: cnt}, nil

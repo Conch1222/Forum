@@ -2,11 +2,13 @@ package middleware
 
 import (
 	"Forum/internal/domain"
+	"Forum/internal/metrics"
 	"Forum/internal/service"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -68,5 +70,24 @@ func RateLimitMiddleware(service service.RateLimitService, rule domain.RateLimit
 		}
 
 		c.Next()
+	}
+}
+
+func PrometheusMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		c.Next()
+
+		method := c.Request.Method
+		route := c.FullPath()
+		if route == "" {
+			route = c.Request.URL.Path
+		}
+		status := strconv.Itoa(c.Writer.Status())
+		duration := time.Since(start).Seconds()
+
+		metrics.HTTPRequestsTotal.WithLabelValues(method, route, status).Inc()
+		metrics.HTTPRequestDuration.WithLabelValues(method, route).Observe(duration)
 	}
 }
