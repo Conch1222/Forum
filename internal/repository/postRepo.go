@@ -7,6 +7,7 @@ import (
 )
 
 type PostRepo interface {
+	WithTx(tx *gorm.DB) PostRepo
 	Create(post *domain.Post) error
 	FindByID(id uint) (*domain.Post, error)
 	Update(post *domain.Post) error
@@ -22,6 +23,10 @@ type postRepo struct {
 
 func NewPostRepo(db *gorm.DB) PostRepo {
 	return &postRepo{db: db}
+}
+
+func (l *postRepo) WithTx(tx *gorm.DB) PostRepo {
+	return &postRepo{db: tx}
 }
 
 func (p *postRepo) Create(post *domain.Post) error {

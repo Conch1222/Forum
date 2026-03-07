@@ -7,6 +7,7 @@ import (
 )
 
 type CommentRepo interface {
+	WithTx(tx *gorm.DB) CommentRepo
 	Create(comment *domain.Comment) error
 	FindByID(id uint) (*domain.Comment, error)
 	ListByPostID(postID uint, limit, offset int) ([]domain.Comment, error)
@@ -20,6 +21,10 @@ type commentRepo struct {
 
 func NewCommentRepo(db *gorm.DB) CommentRepo {
 	return &commentRepo{db: db}
+}
+
+func (r *commentRepo) WithTx(tx *gorm.DB) CommentRepo {
+	return &commentRepo{db: tx}
 }
 
 func (c *commentRepo) Create(comment *domain.Comment) error {
