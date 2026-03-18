@@ -6,7 +6,10 @@ import (
 	"Forum/internal/pkg/cache"
 	"Forum/internal/repository"
 	"context"
+	"fmt"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type LikeService interface {
@@ -29,51 +32,107 @@ func NewLikeService(likeRepo repository.LikeRepo, postRepo repository.PostRepo, 
 }
 
 func (l *likeService) Toggle(ctx context.Context, userID, targetID uint, targetType string) (*domain.LikeResponse, error) {
-	err := l.likeRepo.Create(&domain.Like{
-		UserID:     userID,
-		TargetID:   targetID,
-		TargetType: targetType,
+	var resp *domain.LikeResponse
+	var action string
+
+	// start Transaction
+	err := l.likeRepo.Transaction(func(tx *gorm.DB) error {
+		likeRepo := l.likeRepo.WithTx(tx)
+		postRepo := l.postRepo.WithTx(tx)
+		commentRepo := l.commentRepo.WithTx(tx)
+
+		isCreated, createErr := likeRepo.Create(&domain.Like{
+			UserID:     userID,
+			TargetID:   targetID,
+			TargetType: targetType,
+		})
+
+		if createErr != nil {
+			return createErr
+		}
+
+		// new like
+		if isCreated {
+			switch targetType {
+			// add like count
+			case "post":
+				if err := postRepo.IncrementLikeCount(targetID, 1); err != nil {
+					return err
+				}
+			case "comment":
+				if err := commentRepo.IncrementLikeCount(targetID, 1); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("invalid target type")
+			}
+
+			cnt, err := likeRepo.Count(targetID, targetType)
+			if err != nil {
+				return err
+			}
+
+			resp = &domain.LikeResponse{
+				IsLiked:   true,
+				LikeCount: cnt,
+			}
+
+			action = "liked" // for prometheus
+			return nil
+		}
+
+		// cancel like
+		if !isCreated {
+			if dErr := likeRepo.Delete(userID, targetID, targetType); dErr != nil {
+				return dErr
+			}
+
+			switch targetType {
+			// minus like count
+			case "post":
+				if err := postRepo.IncrementLikeCount(targetID, -1); err != nil {
+					return err
+				}
+			case "comment":
+				if err := commentRepo.IncrementLikeCount(targetID, -1); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("invalid target type")
+			}
+
+			cnt, err := likeRepo.Count(targetID, targetType)
+			if err != nil {
+				return err
+			}
+
+			resp = &domain.LikeResponse{
+				IsLiked:   false,
+				LikeCount: cnt,
+			}
+
+			action = "unliked" // for prometheus
+			return nil
+		}
+
+		return createErr
 	})
 
-	if err == nil {
-		// new like
-		l.updateCache(ctx, userID, targetID, targetType, true, 1)
-
-		// add like count
-		if targetType == "post" {
-			_ = l.postRepo.IncrementLikeCount(targetID, 1)
-		} else if targetType == "comment" {
-			_ = l.commentRepo.IncrementLikeCount(targetID, 1)
-		}
-
-		metrics.LikeToggleTotal.WithLabelValues(targetType, "liked").Inc() // for prometheus
-
-		cnt, _ := l.getCount(ctx, targetID, targetType)
-		return &domain.LikeResponse{IsLiked: true, LikeCount: cnt}, nil
+	if err != nil {
+		return nil, err
 	}
 
-	if err.Error() == "already liked" {
-		// cancel like
-		if dErr := l.likeRepo.Delete(userID, targetID, targetType); dErr != nil {
-			return nil, dErr
-		}
-		l.updateCache(ctx, userID, targetID, targetType, false, -1)
-
-		// minus like count
-		if targetType == "post" {
-			_ = l.postRepo.IncrementLikeCount(targetID, -1)
-		} else if targetType == "comment" {
-			_ = l.commentRepo.IncrementLikeCount(targetID, -1)
-		}
-
-		metrics.LikeToggleTotal.WithLabelValues(targetType, "unliked").Inc()
-
-		cnt, _ := l.getCount(ctx, targetID, targetType)
-		return &domain.LikeResponse{IsLiked: false, LikeCount: cnt}, nil
+	// transaction committed, invalidate cache
+	if l.cache != nil {
+		_ = l.cache.DelCount(ctx, targetType, targetID)
+		_ = l.cache.DeleteUserLikes(ctx, userID, targetType)
 	}
 
-	return nil, err
+	if action != "" {
+		metrics.LikeToggleTotal.WithLabelValues(targetType, action).Inc() // for prometheus
+	}
 
+	return resp, err
 }
 
 func (l *likeService) GetStatus(ctx context.Context, userID, targetID uint, targetType string) (*domain.LikeResponse, error) {

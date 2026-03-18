@@ -2,14 +2,16 @@ package repository
 
 import (
 	"Forum/internal/domain"
-	"errors"
-	"strings"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type LikeRepo interface {
-	Create(like *domain.Like) error
+	Transaction(fn func(tx *gorm.DB) error) error
+	WithTx(tx *gorm.DB) LikeRepo
+
+	Create(like *domain.Like) (bool, error)
 	Delete(userID, targetID uint, targetType string) error
 	IsExist(userID, targetID uint, targetType string) (bool, error)
 	Count(targetID uint, targetType string) (int64, error) // count total likes
@@ -24,16 +26,25 @@ func NewLikeRepo(db *gorm.DB) LikeRepo {
 	return &likeRepo{db: db}
 }
 
-func (l *likeRepo) Create(like *domain.Like) error {
-	err := l.db.Create(like).Error
-	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key") ||
-			strings.Contains(err.Error(), "UNIQUE constraint") {
-			return errors.New("already liked")
-		}
-		return err
+func (l *likeRepo) Transaction(fn func(tx *gorm.DB) error) error {
+	return l.db.Transaction(fn)
+}
+
+func (l *likeRepo) WithTx(tx *gorm.DB) LikeRepo {
+	return &likeRepo{db: tx}
+}
+
+// Create if instance exists, do nothing
+func (l *likeRepo) Create(like *domain.Like) (bool, error) {
+	tx := l.db.Clauses(clause.OnConflict{
+		DoNothing: true,
+	}).Create(like)
+
+	if tx.Error != nil {
+		return false, tx.Error
 	}
-	return nil
+
+	return tx.RowsAffected == 1, nil
 }
 
 func (l *likeRepo) Delete(userID, targetID uint, targetType string) error {

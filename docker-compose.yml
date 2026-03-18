@@ -1,4 +1,26 @@
 services:
+  forum-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: forum-api:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: password
+      DB_NAME: forum_db
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      JWT_KEY: conch2147
+      SERVER_PORT: "8080"
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -9,11 +31,13 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
       - "6380:6379"
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
@@ -21,6 +45,28 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    depends_on:
+      - forum-api
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana-data:
