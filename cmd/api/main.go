@@ -8,12 +8,15 @@ import (
 	"Forum/internal/middleware"
 	"Forum/internal/pkg/cache"
 	"Forum/internal/repository"
+	"Forum/internal/search"
 	"Forum/internal/service"
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -22,7 +25,12 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
 	cfg, err := config.Load()
+
+	wd, _ := os.Getwd()
+	log.Println("working dir:", wd)
+
 	if err != nil {
 		log.Fatal("Error loading config:", err)
 	}
@@ -38,6 +46,18 @@ func main() {
 	if err != nil {
 		log.Fatal("Error initializing redis:", err)
 	}
+
+	// elastic search
+	es, err := search.NewESClient()
+	if err != nil {
+		log.Fatal("Error initializing elasticsearch:", err)
+	}
+
+	// create elastic search index
+	createEsIndex(es)
+
+	// for migrate data
+	runBackfill(ctx, es, db)
 
 	fmt.Println("Connected to database successfully")
 
@@ -240,4 +260,28 @@ func initDBMigrationAndIndex(db *gorm.DB) {
 		ON notifications (user_id, created_at DESC)
 		WHERE deleted_at IS NULL;
 	`)
+}
+
+func createEsIndex(es *elasticsearch.Client) {
+	if err := search.EnsurePostsIndex(es); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func runBackfill(ctx context.Context, es *elasticsearch.Client, db *gorm.DB) {
+	bi, err := search.NewPostBulkIndexer(es)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	runner := &search.BackfillRunner{
+		Db: db,
+		Bi: bi,
+	}
+
+	if err := runner.Run(ctx); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("backfill done")
 }

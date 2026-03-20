@@ -16,6 +16,7 @@ WORKDIR /app
 RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/api /app/api
+COPY --from=builder /src/internal/search/mappings/posts_v1.json /app/internal/search/mappings/posts_v1.json
 
 EXPOSE 8080
 

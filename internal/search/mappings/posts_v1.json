@@ -1,0 +1,20 @@
+{
+  "mappings": {
+    "properties": {
+      "id":         { "type": "keyword" },
+      "user_id":    { "type": "keyword" },
+      "title": {
+        "type": "text",
+        "fields": {
+          "keyword": { "type": "keyword", "ignore_above": 256 }
+        }
+      },
+      "content":    { "type": "text" },
+      "status":     { "type": "keyword" },
+      "view_count": { "type": "integer" },
+      "like_count": { "type": "integer" },
+      "created_at": { "type": "date" },
+      "updated_at": { "type": "date" }
+    }
+  }
+}
