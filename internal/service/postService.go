@@ -4,29 +4,32 @@ import (
 	"Forum/internal/domain"
 	"Forum/internal/metrics"
 	"Forum/internal/repository"
+	"Forum/internal/search"
+	"context"
 	"errors"
 
 	"gorm.io/gorm"
 )
 
 type PostService interface {
-	Create(userID uint, req *domain.CreatePostRequest) (*domain.PostResponse, error)
-	GetByID(postID uint) (*domain.PostResponse, error)
-	Update(userID, postID uint, req *domain.UpdatePostRequest) error
-	Delete(userID, postID uint) error
-	List(page, pageSize int) ([]*domain.PostResponse, int64, error)
+	Create(ctx context.Context, userID uint, req *domain.CreatePostRequest) (*domain.PostResponse, error)
+	GetByID(ctx context.Context, postID uint) (*domain.PostResponse, error)
+	Update(ctx context.Context, userID, postID uint, req *domain.UpdatePostRequest) error
+	Delete(ctx context.Context, userID, postID uint) error
+	List(ctx context.Context, page, pageSize int) ([]*domain.PostResponse, int64, error)
 }
 
 type postServiceImpl struct {
-	postRepo repository.PostRepo
-	userRepo repository.UserRepo
+	postRepo    repository.PostRepo
+	userRepo    repository.UserRepo
+	postIndexer search.PostIndexer
 }
 
-func NewPostService(postRepo repository.PostRepo, userRepo repository.UserRepo) PostService {
-	return &postServiceImpl{postRepo: postRepo, userRepo: userRepo}
+func NewPostService(postRepo repository.PostRepo, userRepo repository.UserRepo, postIndexer search.PostIndexer) PostService {
+	return &postServiceImpl{postRepo: postRepo, userRepo: userRepo, postIndexer: postIndexer}
 }
 
-func (p *postServiceImpl) Create(userID uint, req *domain.CreatePostRequest) (*domain.PostResponse, error) {
+func (p *postServiceImpl) Create(ctx context.Context, userID uint, req *domain.CreatePostRequest) (*domain.PostResponse, error) {
 	// default status
 	if req.Status == "" {
 		req.Status = "published"
@@ -40,6 +43,11 @@ func (p *postServiceImpl) Create(userID uint, req *domain.CreatePostRequest) (*d
 	}
 
 	if err := p.postRepo.Create(post); err != nil {
+		return nil, err
+	}
+
+	// es index post
+	if err := p.postIndexer.IndexPost(ctx, post); err != nil {
 		return nil, err
 	}
 
@@ -59,17 +67,20 @@ func (p *postServiceImpl) Create(userID uint, req *domain.CreatePostRequest) (*d
 	}, nil
 }
 
-func (p *postServiceImpl) GetByID(postID uint) (*domain.PostResponse, error) {
+func (p *postServiceImpl) GetByID(ctx context.Context, postID uint) (*domain.PostResponse, error) {
 	post, err := p.postRepo.FindByID(postID)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("post not found")
 		}
 		return nil, err
 	}
 
 	// increases view count
-	p.postRepo.IncrementViewCount(postID)
+	err = p.postRepo.IncrementViewCount(postID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &domain.PostResponse{
 		ID:        post.ID,
@@ -85,7 +96,7 @@ func (p *postServiceImpl) GetByID(postID uint) (*domain.PostResponse, error) {
 	}, nil
 }
 
-func (p *postServiceImpl) Update(userID, postID uint, req *domain.UpdatePostRequest) error {
+func (p *postServiceImpl) Update(ctx context.Context, userID, postID uint, req *domain.UpdatePostRequest) error {
 	post, err := p.postRepo.FindByID(postID)
 	if err != nil {
 		return errors.New("post not found")
@@ -106,10 +117,20 @@ func (p *postServiceImpl) Update(userID, postID uint, req *domain.UpdatePostRequ
 	if req.Status != "" {
 		post.Status = req.Status
 	}
-	return p.postRepo.Update(post)
+	err = p.postRepo.Update(post)
+	if err != nil {
+		return err
+	}
+
+	// es index post
+	if err := p.postIndexer.IndexPost(ctx, post); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (p *postServiceImpl) Delete(userID, postID uint) error {
+func (p *postServiceImpl) Delete(ctx context.Context, userID, postID uint) error {
 	post, err := p.postRepo.FindByID(postID)
 	if err != nil {
 		return errors.New("post not found")
@@ -119,10 +140,20 @@ func (p *postServiceImpl) Delete(userID, postID uint) error {
 	if post.UserID != userID {
 		return errors.New("permission denied")
 	}
-	return p.postRepo.Delete(postID)
+	err = p.postRepo.Delete(postID)
+	if err != nil {
+		return err
+	}
+
+	// es delete post
+	if err := p.postIndexer.DeletePost(ctx, postID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (p *postServiceImpl) List(page, pageSize int) ([]*domain.PostResponse, int64, error) {
+func (p *postServiceImpl) List(ctx context.Context, page, pageSize int) ([]*domain.PostResponse, int64, error) {
 	if page <= 0 {
 		page = 1
 	}

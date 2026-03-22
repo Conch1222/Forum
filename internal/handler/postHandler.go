@@ -26,7 +26,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		return
 	}
 
-	post, err := h.postService.Create(userID, &req)
+	post, err := h.postService.Create(c.Request.Context(), userID, &req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -42,7 +42,7 @@ func (h *PostHandler) GetPostByID(c *gin.Context) {
 		return
 	}
 
-	post, err := h.postService.GetByID(uint(id))
+	post, err := h.postService.GetByID(c.Request.Context(), uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -65,7 +65,7 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 	}
 
-	if err := h.postService.Update(userID, uint(id), &req); err != nil {
+	if err := h.postService.Update(c.Request.Context(), userID, uint(id), &req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -81,7 +81,7 @@ func (h *PostHandler) DeletePost(c *gin.Context) {
 		return
 	}
 
-	if err := h.postService.Delete(userID, uint(id)); err != nil {
+	if err := h.postService.Delete(c.Request.Context(), userID, uint(id)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -93,7 +93,7 @@ func (h *PostHandler) ListPosts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	posts, totalCount, err := h.postService.List(page, pageSize)
+	posts, totalCount, err := h.postService.List(c.Request.Context(), page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

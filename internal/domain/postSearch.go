@@ -1,7 +1,6 @@
-package search
+package domain
 
 import (
-	"Forum/internal/domain"
 	"strconv"
 	"time"
 )
@@ -18,7 +17,7 @@ type PostSearchDocument struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func NewPostSearchDoc(p domain.Post) PostSearchDocument {
+func NewPostSearchDoc(p Post) PostSearchDocument {
 	return PostSearchDocument{
 		ID:        strconv.FormatUint(uint64(p.ID), 10),
 		UserID:    strconv.FormatUint(uint64(p.UserID), 10),

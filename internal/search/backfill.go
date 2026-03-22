@@ -45,7 +45,7 @@ func (r *BackfillRunner) Run(ctx context.Context) error {
 		}
 
 		for _, post := range posts {
-			doc := NewPostSearchDoc(post)
+			doc := domain.NewPostSearchDoc(post)
 
 			data, err := json.Marshal(doc)
 			if err != nil {

@@ -74,9 +74,11 @@ func main() {
 	searchRepo := repository.NewSearchRepo(db)
 	notificationRepo := repository.NewNotificationRepo(db)
 
+	postIndexer := search.NewPostIndexer(es)
+
 	notificationService := service.NewNotificationService(notificationRepo)
 	userService := service.NewUserService(userRepo, cfg.JWTKey)
-	postService := service.NewPostService(postRepo, userRepo)
+	postService := service.NewPostService(postRepo, userRepo, postIndexer)
 	commentService := service.NewCommentService(commentRepo, postRepo, userRepo, notificationService)
 	likeService := service.NewLikeService(likeRepo, postRepo, commentRepo, likeCache)
 	followService := service.NewFollowService(followRepo)
