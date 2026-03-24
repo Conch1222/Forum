@@ -2,62 +2,102 @@ package repository
 
 import (
 	"Forum/internal/domain"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 
-	"gorm.io/gorm"
+	"github.com/elastic/go-elasticsearch/v8"
 )
 
 type SearchRepo interface {
-	SearchPosts(q string, limit, offset int) ([]domain.PostResponse, int64, error)
+	SearchPosts(ctx context.Context, q string, limit, offset int) ([]domain.PostResponse, int64, error)
 }
 
 type searchRepo struct {
-	db *gorm.DB
+	es *elasticsearch.Client
 }
 
-func NewSearchRepo(db *gorm.DB) SearchRepo {
-	return &searchRepo{db: db}
+func NewSearchRepo(es *elasticsearch.Client) SearchRepo {
+	return &searchRepo{es: es}
 }
 
-func (s *searchRepo) SearchPosts(q string, limit, offset int) ([]domain.PostResponse, int64, error) {
+// SearchPosts use elastic search
+func (s *searchRepo) SearchPosts(ctx context.Context, q string, limit, offset int) ([]domain.PostResponse, int64, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
 		return []domain.PostResponse{}, 0, nil
 	}
 
-	var res []domain.Post
-	var count int64
+	query := buildPostSearchQuery(q, limit, offset)
 
-	// plainto_tsquery transform string to tsquery, e.g. 'go redis' -> 'go' & 'redis'
-	match := "posts.search_tsv @@ plainto_tsquery('simple', ?)"
-	base := s.db.Model(&domain.Post{}).
-		Where("status = ?", "published").
-		Where(match, q)
+	res, err := s.es.Search(
+		s.es.Search.WithContext(ctx),
+		s.es.Search.WithIndex("posts_v1"),
+		s.es.Search.WithBody(strings.NewReader(query)))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer res.Body.Close()
 
-	if err := base.Count(&count).Error; err != nil {
+	if res.IsError() {
+		return nil, 0, fmt.Errorf("search failed: %s", res.String())
+	}
+
+	var response domain.EsPostSearchResponse
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
 		return nil, 0, err
 	}
 
-	// use rank to calculate and order
-	err := base.Select("posts.*, ts_rank(posts.search_tsv, plainto_tsquery('simple', ?)) AS rank", q).
-		Preload("User").
-		Order("rank desc").
-		Order("created_at desc, id desc").
-		Limit(limit).
-		Offset(offset).
-		Find(&res).Error
+	posts := make([]domain.PostResponse, 0, len(response.Hits.Hits))
+	for _, hit := range response.Hits.Hits {
+		userID, _ := strconv.ParseUint(hit.Source.UserID, 10, 64)
+		postID, _ := strconv.ParseUint(hit.Source.ID, 10, 64)
 
-	var posts []domain.PostResponse
-	for _, post := range res {
 		posts = append(posts, domain.PostResponse{
-			ID:        post.ID,
-			UserID:    post.UserID,
-			UserName:  post.User.UserName,
-			Title:     post.Title,
-			Content:   post.Content,
-			LikeCount: post.LikeCount,
-			CreatedAt: post.CreatedAt,
+			ID:        uint(postID),
+			UserID:    uint(userID),
+			Title:     hit.Source.Title,
+			Content:   hit.Source.Content,
+			LikeCount: hit.Source.LikeCount,
+			CreatedAt: hit.Source.CreatedAt,
+			UpdatedAt: hit.Source.UpdatedAt,
 		})
 	}
-	return posts, count, err
+
+	return posts, response.Hits.Total.Value, nil
+}
+
+func buildPostSearchQuery(q string, limit, offset int) string {
+	query := fmt.Sprintf(`{
+	  "track_total_hits": true,
+	  "from": %d,
+	  "size": %d,
+	  "sort": [
+		{ "_score": { "order": "desc" } },
+		{ "created_at": { "order": "desc" } }
+	  ],
+	  "query": {
+		"bool": {
+		  "must": [
+			{
+			  "multi_match": {
+				"query": %q,
+				"fields": ["title^2", "content"]
+			  }
+			}
+		  ],
+		  "filter": [
+			{
+			  "term": {
+				"status": "published"
+			  }
+			}
+		  ]
+		}
+	  }
+	}`, offset, limit, q)
+
+	return query
 }

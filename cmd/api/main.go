@@ -71,7 +71,7 @@ func main() {
 	likeCache := cache.NewLikeCache(rdb)
 	followRepo := repository.NewFollowRepo(db)
 	feedRepo := repository.NewFeedRepo(db)
-	searchRepo := repository.NewSearchRepo(db)
+	searchRepo := repository.NewSearchRepo(es)
 	notificationRepo := repository.NewNotificationRepo(db)
 
 	postIndexer := search.NewPostIndexer(es)
@@ -268,6 +268,7 @@ func createEsIndex(es *elasticsearch.Client) {
 	if err := search.EnsurePostsIndex(es); err != nil {
 		log.Fatal(err)
 	}
+	log.Println("create index succeeded")
 }
 
 func runBackfill(ctx context.Context, es *elasticsearch.Client, db *gorm.DB) {

@@ -30,3 +30,26 @@ func NewPostSearchDoc(p Post) PostSearchDocument {
 		UpdatedAt: p.UpdatedAt,
 	}
 }
+
+type EsPostSearchResponse struct {
+	Hits struct {
+		Total struct {
+			Value    int64  `json:"value"`
+			Relation string `json:"relation"`
+		} `json:"total"`
+		Hits []struct {
+			ID     string  `json:"_id"`
+			Score  float64 `json:"_score"`
+			Source struct {
+				ID        string    `json:"id"`
+				UserID    string    `json:"user_id"`
+				Title     string    `json:"title"`
+				Content   string    `json:"content"`
+				Status    string    `json:"status"`
+				LikeCount int       `json:"like_count"`
+				CreatedAt time.Time `json:"created_at"`
+				UpdatedAt time.Time `json:"updated_at"`
+			} `json:"_source"`
+		} `json:"hits"`
+	} `json:"hits"`
+}

@@ -36,5 +36,5 @@ func (s *searchServiceImpl) SearchPosts(ctx context.Context, q string, page, pag
 	}
 
 	offset := (page - 1) * pageSize
-	return s.searchRepo.SearchPosts(q, pageSize, offset)
+	return s.searchRepo.SearchPosts(ctx, q, pageSize, offset)
 }
