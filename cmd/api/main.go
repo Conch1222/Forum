@@ -48,7 +48,7 @@ func main() {
 	}
 
 	// elastic search
-	es, err := search.NewESClient()
+	es, err := search.NewESClient(cfg)
 	if err != nil {
 		log.Fatal("Error initializing elasticsearch:", err)
 	}
@@ -155,7 +155,7 @@ func main() {
 }
 
 func initDB(cfg *config.Config) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
