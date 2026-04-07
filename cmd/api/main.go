@@ -16,9 +16,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/opensearch-project/opensearch-go/v4/opensearchapi"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -264,14 +264,14 @@ func initDBMigrationAndIndex(db *gorm.DB) {
 	`)
 }
 
-func createEsIndex(es *elasticsearch.Client) {
+func createEsIndex(es *opensearchapi.Client) {
 	if err := search.EnsurePostsIndex(es); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("create index succeeded")
 }
 
-func runBackfill(ctx context.Context, es *elasticsearch.Client, db *gorm.DB) {
+func runBackfill(ctx context.Context, es *opensearchapi.Client, db *gorm.DB) {
 	bi, err := search.NewPostBulkIndexer(es)
 	if err != nil {
 		log.Fatal(err)

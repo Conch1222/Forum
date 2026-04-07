@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
-	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/opensearch-project/opensearch-go/v4/opensearchapi"
 )
 
 type SearchRepo interface {
@@ -16,10 +17,10 @@ type SearchRepo interface {
 }
 
 type searchRepo struct {
-	es *elasticsearch.Client
+	es *opensearchapi.Client
 }
 
-func NewSearchRepo(es *elasticsearch.Client) SearchRepo {
+func NewSearchRepo(es *opensearchapi.Client) SearchRepo {
 	return &searchRepo{es: es}
 }
 
@@ -32,17 +33,26 @@ func (s *searchRepo) SearchPosts(ctx context.Context, q string, limit, offset in
 
 	query := buildPostSearchQuery(q, limit, offset)
 
-	res, err := s.es.Search(
-		s.es.Search.WithContext(ctx),
-		s.es.Search.WithIndex("posts_v1"),
-		s.es.Search.WithBody(strings.NewReader(query)))
+	req := opensearchapi.SearchReq{
+		Indices: []string{"posts_v1"},
+		Body:    strings.NewReader(query),
+	}
+
+	httpReq, err := req.GetRequest()
+	if err != nil {
+		return nil, 0, err
+	}
+	httpReq = httpReq.WithContext(ctx)
+
+	res, err := s.es.Client.Perform(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer res.Body.Close()
 
-	if res.IsError() {
-		return nil, 0, fmt.Errorf("search failed: %s", res.String())
+	if res.StatusCode >= 300 {
+		body, _ := io.ReadAll(res.Body)
+		return nil, 0, fmt.Errorf("search failed: status=%d body=%s", res.StatusCode, string(body))
 	}
 
 	var response domain.EsPostSearchResponse

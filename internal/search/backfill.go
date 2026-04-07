@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/esutil"
+	"github.com/opensearch-project/opensearch-go/v4/opensearchapi"
+	"github.com/opensearch-project/opensearch-go/v4/opensearchutil"
 	"gorm.io/gorm"
 )
 
 type BackfillRunner struct {
 	Db *gorm.DB
-	Bi esutil.BulkIndexer
+	Bi opensearchutil.BulkIndexer
 }
 
 // Run migrate postgres posts table to elastic search
@@ -35,6 +35,7 @@ func (r *BackfillRunner) Run(ctx context.Context) error {
 			Where("deleted_at IS NULL").
 			Where("id > ?", lastID).
 			Order("id ASC").
+			Limit(batchSize).
 			Find(&posts).Error
 		if err != nil {
 			return err
@@ -52,11 +53,11 @@ func (r *BackfillRunner) Run(ctx context.Context) error {
 				return err
 			}
 
-			err = r.Bi.Add(ctx, esutil.BulkIndexerItem{
+			err = r.Bi.Add(ctx, opensearchutil.BulkIndexerItem{
 				Action:     "index",
 				DocumentID: strconv.FormatUint(uint64(post.ID), 10),
 				Body:       bytes.NewReader(data),
-				OnFailure: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem, err error) {
+				OnFailure: func(ctx context.Context, item opensearchutil.BulkIndexerItem, res opensearchapi.BulkRespItem, err error) {
 					if err != nil {
 						log.Printf("bulk indexer error: %v", err)
 						return
@@ -76,11 +77,19 @@ func (r *BackfillRunner) Run(ctx context.Context) error {
 	return r.Bi.Close(ctx)
 }
 
-func EnsurePostsIndex(es *elasticsearch.Client) error {
+func EnsurePostsIndex(es *opensearchapi.Client) error {
 	const indexName = "posts_v1"
 	const mappingFile = "internal/search/mappings/posts_v1.json"
 
-	existsResp, err := es.Indices.Exists([]string{indexName})
+	existsReq := opensearchapi.IndicesExistsReq{
+		Indices: []string{indexName},
+	}
+	httpReq, err := existsReq.GetRequest()
+	if err != nil {
+		return fmt.Errorf("failed to build exists request: %w", err)
+	}
+
+	existsResp, err := es.Client.Perform(httpReq)
 	if err != nil {
 		return fmt.Errorf("failed to check if index exists: %w", err)
 	}
@@ -100,21 +109,31 @@ func EnsurePostsIndex(es *elasticsearch.Client) error {
 		return fmt.Errorf("failed to read mapping file: %w", err)
 	}
 
-	createResp, err := es.Indices.Create(indexName, es.Indices.Create.WithBody(strings.NewReader(string(data))))
+	createReq := opensearchapi.IndicesCreateReq{
+		Index: indexName,
+		Body:  strings.NewReader(string(data)),
+	}
+
+	createHTTPReq, err := createReq.GetRequest()
+	if err != nil {
+		return fmt.Errorf("failed to build create index request: %w", err)
+	}
+
+	createResp, err := es.Client.Perform(createHTTPReq)
 	if err != nil {
 		return fmt.Errorf("failed to create index: %w", err)
 	}
 	defer createResp.Body.Close()
 
-	if createResp.IsError() {
+	if createResp.StatusCode >= 300 {
 		body, _ := io.ReadAll(createResp.Body)
 		return fmt.Errorf("create index failed: status=%d, body=%s", createResp.StatusCode, string(body))
 	}
 	return nil
 }
 
-func NewPostBulkIndexer(es *elasticsearch.Client) (esutil.BulkIndexer, error) {
-	return esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
+func NewPostBulkIndexer(es *opensearchapi.Client) (opensearchutil.BulkIndexer, error) {
+	return opensearchutil.NewBulkIndexer(opensearchutil.BulkIndexerConfig{
 		Client:        es,
 		Index:         "posts_v1",
 		NumWorkers:    2,

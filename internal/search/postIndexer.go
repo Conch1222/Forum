@@ -2,13 +2,14 @@ package search
 
 import (
 	"Forum/internal/domain"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 
-	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/opensearch-project/opensearch-go/v4/opensearchapi"
+	"github.com/opensearch-project/opensearch-go/v4/opensearchutil"
 )
 
 type PostIndexer interface {
@@ -17,10 +18,10 @@ type PostIndexer interface {
 }
 
 type PostIndexerImpl struct {
-	es *elasticsearch.Client
+	es *opensearchapi.Client
 }
 
-func NewPostIndexer(es *elasticsearch.Client) PostIndexer {
+func NewPostIndexer(es *opensearchapi.Client) PostIndexer {
 	return &PostIndexerImpl{es: es}
 }
 
@@ -37,42 +38,53 @@ func (p *PostIndexerImpl) IndexPost(ctx context.Context, post *domain.Post) erro
 		"updated_at": post.UpdatedAt,
 	}
 
-	body, err := json.Marshal(doc)
+	req := opensearchapi.IndexReq{
+		Index:      "posts_v1",
+		DocumentID: strconv.FormatUint(uint64(post.ID), 10),
+		Body:       opensearchutil.NewJSONReader(doc),
+	}
+
+	httpReq, err := req.GetRequest()
 	if err != nil {
 		return err
 	}
+	httpReq = httpReq.WithContext(ctx)
 
-	res, err := p.es.Index("posts_v1",
-		bytes.NewBuffer(body),
-		p.es.Index.WithDocumentID(strconv.FormatUint(uint64(post.ID), 10)),
-		p.es.Index.WithContext(ctx),
-	)
-
+	res, err := p.es.Client.Perform(httpReq)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
 
-	if res.IsError() {
-		return fmt.Errorf("index post to es failed: %s", res.String())
+	if res.StatusCode >= 300 {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("index post to opensearch failed: status=%d, body=%s", res.StatusCode, string(body))
 	}
 
 	return nil
 }
 
 func (p *PostIndexerImpl) DeletePost(ctx context.Context, postID uint) error {
-	res, err := p.es.Delete(
-		"posts_v1",
-		strconv.FormatUint(uint64(postID), 10),
-		p.es.Delete.WithContext(ctx),
-	)
+	req := opensearchapi.DocumentDeleteReq{
+		Index:      "posts_v1",
+		DocumentID: strconv.FormatUint(uint64(postID), 10),
+	}
+
+	httpReq, err := req.GetRequest()
+	if err != nil {
+		return err
+	}
+	httpReq = httpReq.WithContext(ctx)
+
+	res, err := p.es.Client.Perform(httpReq)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
 
-	if res.IsError() {
-		return fmt.Errorf("delete post from es failed: %s", res.String())
+	if res.StatusCode >= 300 && res.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("delete post from opensearch failed: status=%d body=%s", res.StatusCode, string(body))
 	}
 
 	return nil
