@@ -56,12 +56,12 @@ func main() {
 	// create elastic search index
 	createEsIndex(es)
 
-	// for migrate data
-	runBackfill(ctx, es, db)
-
 	fmt.Println("Connected to database successfully")
 
 	initDBMigrationAndIndex(db)
+
+	// for migrate data, after migrating DB data
+	runBackfill(ctx, es, db)
 
 	// init layers
 	userRepo := repository.NewUserRepo(db)
